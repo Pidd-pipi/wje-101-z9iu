@@ -12,6 +12,7 @@ export interface TastingNote {
   id: number
   user_id: number
   coffee_name: string
+  bean_id: number
   origin: string
   roast_level: RoastLevel
   flavor_tags: string

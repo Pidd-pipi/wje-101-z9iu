@@ -69,3 +69,15 @@ func RoleText(r string) string {
 		return "未知"
 	}
 }
+
+// BeanTrackText maps a bean tracking status to Chinese text.
+func BeanTrackText(s string) string {
+	switch s {
+	case "want":
+		return "待喝"
+	case "tasted":
+		return "喝过"
+	default:
+		return "未知"
+	}
+}

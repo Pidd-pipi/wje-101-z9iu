@@ -16,16 +16,17 @@ import (
 
 // UserHandler exposes user endpoints.
 type UserHandler struct {
-	svc       *service.UserService
-	noteSvc   *service.NoteService
-	followSvc *service.FollowService
-	likeSvc   *service.LikeService
-	logger    *slog.Logger
+	svc         *service.UserService
+	noteSvc     *service.NoteService
+	followSvc   *service.FollowService
+	likeSvc     *service.LikeService
+	userBeanSvc *service.UserBeanService
+	logger      *slog.Logger
 }
 
 // NewUserHandler creates a UserHandler.
-func NewUserHandler(svc *service.UserService, noteSvc *service.NoteService, followSvc *service.FollowService, likeSvc *service.LikeService, logger *slog.Logger) *UserHandler {
-	return &UserHandler{svc: svc, noteSvc: noteSvc, followSvc: followSvc, likeSvc: likeSvc, logger: logger}
+func NewUserHandler(svc *service.UserService, noteSvc *service.NoteService, followSvc *service.FollowService, likeSvc *service.LikeService, userBeanSvc *service.UserBeanService, logger *slog.Logger) *UserHandler {
+	return &UserHandler{svc: svc, noteSvc: noteSvc, followSvc: followSvc, likeSvc: likeSvc, userBeanSvc: userBeanSvc, logger: logger}
 }
 
 // Register handles POST /users/register.
@@ -100,14 +101,16 @@ func (h *UserHandler) Profile(c *gin.Context) {
 	origins, _ := h.noteSvc.TopOrigins(uint(id))
 	followers, following, _ := h.followSvc.Counts(uint(id))
 	likesReceived, _ := h.likeSvc.CountByUserNotes(uint(id))
+	beanGroups, _ := h.userBeanSvc.ProfileGroups(uint(id))
 	c.JSON(http.StatusOK, dto.OK(gin.H{
-		"user":          u,
-		"note_count":    len(notes),
-		"avg_score":     avg,
-		"top_origins":   origins,
-		"followers":     followers,
-		"following":     following,
+		"user":           u,
+		"note_count":     len(notes),
+		"avg_score":      avg,
+		"top_origins":    origins,
+		"followers":      followers,
+		"following":      following,
 		"likes_received": likesReceived,
-		"notes":         notes,
+		"notes":          notes,
+		"bean_groups":    beanGroups,
 	}))
 }

@@ -18,11 +18,35 @@
     <el-row :gutter="16">
       <el-col v-for="b in beans" :key="b.id" :xs="24" :sm="12" :md="8">
         <el-card class="bean-card" shadow="hover">
-          <h3>{{ b.name }} <el-tag size="small" type="warning">{{ ProcessMethodMap[b.process_method] }}</el-tag></h3>
-          <div class="meta">{{ b.origin || '-' }}</div>
+          <h3>
+            {{ b.name }} <el-tag size="small" type="warning">{{ ProcessMethodMap[b.process_method] }}</el-tag>
+            <el-tag v-if="isLoggedIn && b.tracked" size="small" :type="b.track_status === 'tasted' ? 'success' : 'info'" class="track-tag">
+              {{ b.track_status === 'tasted' ? `喝过 ${b.user_note_count} 篇` : '待喝' }}
+            </el-tag>
+          </h3>
+          <div class="meta">{{ b.origin || '-' }} · 共 {{ b.note_total || 0 }} 篇品鉴</div>
           <FlavorTags :tags="b.flavor_tags" />
           <p class="desc">{{ b.description }}</p>
-          <el-button v-if="isAdmin" size="small" type="danger" plain @click="removeBean(b.id)">删除</el-button>
+          <div class="card-actions">
+            <template v-if="isLoggedIn">
+              <el-button
+                v-if="!b.tracked"
+                size="small" type="primary" plain
+                :loading="pendingId === b.id"
+                @click="addToWant(b)"
+              >加入待喝</el-button>
+              <template v-else-if="b.track_status === 'want'">
+                <el-tag size="small" type="info">待喝名单中</el-tag>
+                <el-button
+                  size="small" type="danger" plain
+                  :loading="pendingId === b.id"
+                  @click="removeFromWant(b)"
+                >移出</el-button>
+              </template>
+              <el-tag v-else size="small" type="success">已喝 {{ b.user_note_count }} 篇</el-tag>
+            </template>
+            <el-button v-if="isAdmin" size="small" type="danger" plain @click="removeBean(b.id)">删除</el-button>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -50,27 +74,34 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import SearchFilter from '@/components/common/SearchFilter.vue'
 import FlavorTags from '@/components/common/FlavorTags.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useBeanStore } from '@/stores/useBeanStore'
 import { useAuth } from '@/hooks/useAuth'
-import { createBean, deleteBean } from '@/api/bean'
-import { ProcessMethodMap, type ProcessMethod } from '@/constants/bean'
+import { createBean, deleteBean, addBeanToWant, removeBeanFromWant } from '@/api/bean'
+import { ProcessMethodMap, type ProcessMethod, type CoffeeBean } from '@/constants/bean'
 
 const store = useBeanStore()
-const { isAdmin } = useAuth()
+const { isAdmin, isLoggedIn } = useAuth()
+const route = useRoute()
 const beans = computed(() => store.beans)
 const origin = ref('')
 const process = ref('')
 const keyword = ref('')
 const showAdd = ref(false)
+// The bean whose 待喝 request is in flight; failures leave the card unchanged.
+const pendingId = ref(0)
 const addForm = reactive({ name: '', origin: '', process_method: 'washed', flavor_tags: '[]', description: '' })
 
 const ORIGINS = ['埃塞俄比亚', '哥伦比亚', '哥斯达黎加', '印度尼西亚']
 
-onMounted(() => load())
+onMounted(() => {
+  if (typeof route.query.keyword === 'string') keyword.value = route.query.keyword
+  load()
+})
 
 async function load() {
   await store.load({ page: 1, page_size: 20, origin: origin.value, process: process.value, keyword: keyword.value })
@@ -84,6 +115,38 @@ function onReset() {
   process.value = ''
   keyword.value = ''
   load()
+}
+
+// Add to 待喝: only mutate the card after the API succeeds.
+async function addToWant(b: CoffeeBean) {
+  pendingId.value = b.id
+  try {
+    await addBeanToWant(b.id)
+    b.tracked = true
+    b.track_status = 'want'
+    b.user_note_count = 0
+    ElMessage.success('已加入待喝名单')
+  } catch {
+    // request.ts surfaced the error; keep the original button state.
+  } finally {
+    pendingId.value = 0
+  }
+}
+
+// Remove from 待喝: a 喝过 bean is rejected server-side, state is preserved on failure.
+async function removeFromWant(b: CoffeeBean) {
+  pendingId.value = b.id
+  try {
+    await removeBeanFromWant(b.id)
+    b.tracked = false
+    b.track_status = ''
+    b.user_note_count = 0
+    ElMessage.success('已移出待喝名单')
+  } catch {
+    // keep the card in 待喝 state
+  } finally {
+    pendingId.value = 0
+  }
 }
 async function addBean() {
   if (!addForm.name) {
@@ -107,4 +170,6 @@ async function removeBean(id: number) {
 .bean-card { margin-bottom: 16px; }
 .meta { color: #999; font-size: 12px; margin: 6px 0; }
 .desc { color: #666; margin-top: 8px; }
+.track-tag { margin-left: 6px; }
+.card-actions { margin-top: 10px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 </style>

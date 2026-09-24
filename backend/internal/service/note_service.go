@@ -13,13 +13,14 @@ import (
 
 // NoteService handles tasting notes.
 type NoteService struct {
-	repo   *repository.TastingNoteRepository
-	logger *slog.Logger
+	repo        *repository.TastingNoteRepository
+	userBeanSvc *UserBeanService
+	logger      *slog.Logger
 }
 
 // NewNoteService creates a NoteService.
-func NewNoteService(repo *repository.TastingNoteRepository, logger *slog.Logger) *NoteService {
-	return &NoteService{repo: repo, logger: logger}
+func NewNoteService(repo *repository.TastingNoteRepository, userBeanSvc *UserBeanService, logger *slog.Logger) *NoteService {
+	return &NoteService{repo: repo, userBeanSvc: userBeanSvc, logger: logger}
 }
 
 // Create adds a note for a user.
@@ -31,6 +32,11 @@ func (s *NoteService) Create(userID uint, n *model.TastingNote) (*model.TastingN
 	n.UserID = userID
 	if n.FlavorTags == "" {
 		n.FlavorTags = "[]"
+	}
+	// Selecting a bean moves it into the user's 喝过 list (and creates the
+	// to-drink row on the fly when it does not exist yet).
+	if err := s.userBeanSvc.EnsureTracked(userID, n.BeanID); err != nil {
+		return nil, err
 	}
 	if err := s.repo.Create(n); err != nil {
 		s.logger.Error(fmt.Sprintf(constants.LogNoteCreateFailed, n.CoffeeName), "error", err)
@@ -62,30 +68,29 @@ func (s *NoteService) Update(userID, id uint, n *model.TastingNote) (*model.Tast
 		return nil, util.NewAppError(403, constants.CodeForbidden,
 			fmt.Sprintf("TastingNote[id=%d] update failed: user_id=%d not owner", id, userID))
 	}
-	if n.CoffeeName != "" {
-		exist.CoffeeName = n.CoffeeName
-	}
-	if n.Origin != "" {
-		exist.Origin = n.Origin
-	}
 	if n.RoastLevel != "" {
 		if !constants.IsValidRoastLevel(n.RoastLevel) {
 			return nil, util.NewAppError(422, constants.CodeValidationError, "invalid roast level")
 		}
 		exist.RoastLevel = n.RoastLevel
 	}
-	if n.FlavorTags != "" {
-		exist.FlavorTags = n.FlavorTags
+	// Switching the selected bean tracks the new bean; the previous bean's
+	// 喝过 count is derived from remaining notes and falls back to 待喝 at zero.
+	if err := s.userBeanSvc.EnsureTracked(userID, n.BeanID); err != nil {
+		return nil, err
 	}
-	if n.NotesText != "" {
-		exist.NotesText = n.NotesText
-	}
-	if n.OverallScore > 0 {
-		exist.AromaScore = n.AromaScore
-		exist.AcidityScore = n.AcidityScore
-		exist.BodyScore = n.BodyScore
-		exist.OverallScore = n.OverallScore
-	}
+	exist.BeanID = n.BeanID
+	exist.CoffeeName = n.CoffeeName
+	exist.Origin = n.Origin
+	exist.FlavorTags = n.FlavorTags
+	exist.NotesText = n.NotesText
+	exist.BrewMethod = n.BrewMethod
+	exist.BrewRecipeID = n.BrewRecipeID
+	exist.ImageURL = n.ImageURL
+	exist.AromaScore = n.AromaScore
+	exist.AcidityScore = n.AcidityScore
+	exist.BodyScore = n.BodyScore
+	exist.OverallScore = n.OverallScore
 	if err := s.repo.Update(exist); err != nil {
 		return nil, fmt.Errorf("note update: %w", err)
 	}

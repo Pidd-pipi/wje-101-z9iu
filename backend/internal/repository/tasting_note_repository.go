@@ -10,10 +10,14 @@ import (
 type TastingNoteRepository struct{ db *gorm.DB }
 
 // NewTastingNoteRepository creates the repository.
-func NewTastingNoteRepository(db *gorm.DB) *TastingNoteRepository { return &TastingNoteRepository{db: db} }
+func NewTastingNoteRepository(db *gorm.DB) *TastingNoteRepository {
+	return &TastingNoteRepository{db: db}
+}
 
 // Create inserts a note.
-func (r *TastingNoteRepository) Create(n *model.TastingNote) error { return translate(r.db.Create(n).Error) }
+func (r *TastingNoteRepository) Create(n *model.TastingNote) error {
+	return translate(r.db.Create(n).Error)
+}
 
 // FindByID locates a note by id.
 func (r *TastingNoteRepository) FindByID(id uint) (*model.TastingNote, error) {
@@ -25,7 +29,9 @@ func (r *TastingNoteRepository) FindByID(id uint) (*model.TastingNote, error) {
 }
 
 // Update persists a note.
-func (r *TastingNoteRepository) Update(n *model.TastingNote) error { return translate(r.db.Save(n).Error) }
+func (r *TastingNoteRepository) Update(n *model.TastingNote) error {
+	return translate(r.db.Save(n).Error)
+}
 
 // Delete removes a note by id.
 func (r *TastingNoteRepository) Delete(id uint) error {
@@ -97,4 +103,67 @@ func (r *TastingNoteRepository) TopOrigins(userID uint) ([]string, error) {
 		return nil, err
 	}
 	return origins, nil
+}
+
+// CountByUserBean counts a user's notes linked to a bean.
+func (r *TastingNoteRepository) CountByUserBean(userID, beanID uint) (int64, error) {
+	var total int64
+	if err := r.db.Model(&model.TastingNote{}).
+		Where("user_id = ? AND bean_id = ?", userID, beanID).
+		Count(&total).Error; err != nil {
+		return 0, err
+	}
+	return total, nil
+}
+
+// CountByUserBeans groups a user's note counts by bean id.
+func (r *TastingNoteRepository) CountByUserBeans(userID uint) (map[uint]int64, error) {
+	type row struct {
+		BeanID uint
+		Total  int64
+	}
+	var rows []row
+	if err := r.db.Model(&model.TastingNote{}).
+		Select("bean_id, count(*) AS total").
+		Where("user_id = ? AND bean_id > 0", userID).
+		Group("bean_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	counts := make(map[uint]int64, len(rows))
+	for _, x := range rows {
+		counts[x.BeanID] = x.Total
+	}
+	return counts, nil
+}
+
+// CountByBeans groups all note counts by bean id across the platform.
+func (r *TastingNoteRepository) CountByBeans() (map[uint]int64, error) {
+	type row struct {
+		BeanID uint
+		Total  int64
+	}
+	var rows []row
+	if err := r.db.Model(&model.TastingNote{}).
+		Select("bean_id, count(*) AS total").
+		Where("bean_id > 0").
+		Group("bean_id").
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	counts := make(map[uint]int64, len(rows))
+	for _, x := range rows {
+		counts[x.BeanID] = x.Total
+	}
+	return counts, nil
+}
+
+// ListByUserBean returns a user's notes linked to a bean, newest first.
+func (r *TastingNoteRepository) ListByUserBean(userID, beanID uint) ([]model.TastingNote, error) {
+	var items []model.TastingNote
+	if err := r.db.Where("user_id = ? AND bean_id = ?", userID, beanID).
+		Order("id DESC").Find(&items).Error; err != nil {
+		return nil, err
+	}
+	return items, nil
 }

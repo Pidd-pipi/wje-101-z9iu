@@ -9,6 +9,7 @@ import (
 
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/constants"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/dto"
+	"github.com/wjecoffeetaste/wjecoffeetaste/internal/middleware"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/model"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/service"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/util"
@@ -16,13 +17,14 @@ import (
 
 // BeanHandler exposes coffee bean endpoints.
 type BeanHandler struct {
-	svc    *service.BeanService
-	logger *slog.Logger
+	svc         *service.BeanService
+	userBeanSvc *service.UserBeanService
+	logger      *slog.Logger
 }
 
 // NewBeanHandler creates a BeanHandler.
-func NewBeanHandler(svc *service.BeanService, logger *slog.Logger) *BeanHandler {
-	return &BeanHandler{svc: svc, logger: logger}
+func NewBeanHandler(svc *service.BeanService, userBeanSvc *service.UserBeanService, logger *slog.Logger) *BeanHandler {
+	return &BeanHandler{svc: svc, userBeanSvc: userBeanSvc, logger: logger}
 }
 
 // List handles GET /beans.
@@ -43,7 +45,14 @@ func (h *BeanHandler) List(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(dto.PageData{List: items, Total: total, Page: page, Size: pageSize}))
+	// Anonymous viewers only see the public drink total; logged-in viewers
+	// additionally receive their own 待喝/喝过 state.
+	decorated, err := h.userBeanSvc.DecorateList(items, middleware.GetUserID(c))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(dto.PageData{List: decorated, Total: total, Page: page, Size: pageSize}))
 }
 
 // Create handles POST /beans (admin).

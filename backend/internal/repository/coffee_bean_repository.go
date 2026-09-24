@@ -13,7 +13,9 @@ type CoffeeBeanRepository struct{ db *gorm.DB }
 func NewCoffeeBeanRepository(db *gorm.DB) *CoffeeBeanRepository { return &CoffeeBeanRepository{db: db} }
 
 // Create inserts a bean.
-func (r *CoffeeBeanRepository) Create(b *model.CoffeeBean) error { return translate(r.db.Create(b).Error) }
+func (r *CoffeeBeanRepository) Create(b *model.CoffeeBean) error {
+	return translate(r.db.Create(b).Error)
+}
 
 // FindByID locates a bean by id.
 func (r *CoffeeBeanRepository) FindByID(id uint) (*model.CoffeeBean, error) {
@@ -24,8 +26,22 @@ func (r *CoffeeBeanRepository) FindByID(id uint) (*model.CoffeeBean, error) {
 	return &b, nil
 }
 
+// FindByIDs locates beans by a set of ids.
+func (r *CoffeeBeanRepository) FindByIDs(ids []uint) ([]model.CoffeeBean, error) {
+	items := make([]model.CoffeeBean, 0, len(ids))
+	if len(ids) == 0 {
+		return items, nil
+	}
+	if err := translate(r.db.Where("id IN ?", ids).Find(&items).Error); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // Update persists a bean.
-func (r *CoffeeBeanRepository) Update(b *model.CoffeeBean) error { return translate(r.db.Save(b).Error) }
+func (r *CoffeeBeanRepository) Update(b *model.CoffeeBean) error {
+	return translate(r.db.Save(b).Error)
+}
 
 // Delete removes a bean.
 func (r *CoffeeBeanRepository) Delete(id uint) error {

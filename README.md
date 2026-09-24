@@ -1,6 +1,14 @@
 # BrewNotes（咖啡品鉴社区）
 
-面向咖啡爱好者的全栈社区：记录每次咖啡品鉴的详细笔记（风味、评分、冲煮方式），浏览和收藏豆种信息，创建和分享冲煮配方，通过评论与点赞互动，个人主页提供品鉴历史与偏好画像统计。
+面向咖啡爱好者的全栈社区：记录每次咖啡品鉴的详细笔记（风味、评分、冲煮方式），浏览和收藏豆种信息，把想喝的豆加入「待喝名单」、发布笔记后自动归入「喝过」，创建和分享冲煮配方，通过评论与点赞互动，个人主页提供品鉴历史、待喝/喝过分组与偏好画像统计。
+
+## 待喝 / 喝过名单
+
+- 豆种库默认仍可匿名浏览；**登录后**每张豆种卡片可「加入待喝」，每只豆在每位用户名下只保留一条记录。
+- 发布品鉴笔记并选定某款豆（或编辑笔记把豆换成该款）时，该豆自动进入「喝过」并累计笔记篇数。
+- 笔记撤下（删除）或换豆后，对应篇数实时减少；归零后自动回到「待喝」，可再移出名单。
+- 个人主页分为「待喝名单」和「喝过的豆」两组：待喝项可一键移出（本人主页），喝过项可直接查看对应的每一篇笔记。
+- 未登录用户仍能浏览豆种库，并可看到每只豆的全平台品鉴总次数；任何操作失败都会保留原状态，空清单显示引导提示。
 
 ## Docker Compose 一键启动（推荐）
 
@@ -66,12 +74,12 @@ wje-101/
 │   ├── cmd/server/            # main.go + migrate/seed
 │   └── internal/
 │       ├── config/            # DB/JWT/限流/上传配置
-│       ├── model/             # 7 个实体
+│       ├── model/             # 8 个实体（含 UserBean 待喝名单）
 │       ├── repository/        # 按实体分文件
 │       ├── service/           # 按实体分文件
 │       ├── handler/           # 按实体分文件 + upload
 │       ├── router/            # router.go + 按实体分文件
-│       ├── middleware/        # auth/rbac/rate_limiter/error_handler/logger/cors
+│       ├── middleware/        # auth/optional_auth/rbac/rate_limiter/error_handler/logger/cors
 │       ├── dto/
 │       ├── constants/         # note/bean/user/error_codes/log_templates/messages
 │       └── util/              # jwt/logger/formatters/file
@@ -116,7 +124,7 @@ wje-101/
 | POST | /api/v1/users/login | 公开（限流） | 登录并返回 JWT |
 | GET | /api/v1/users/me | 登录 | 获取当前用户 |
 | PUT | /api/v1/users/me | 登录 | 更新当前用户资料 |
-| GET | /api/v1/users/:id/profile | 公开 | 用户主页（含统计） |
+| GET | /api/v1/users/:id/profile | 公开 | 用户主页（含统计、品鉴历史、待喝/喝过分组 `bean_groups`） |
 | POST | /api/v1/users/:id/follow | 登录（限流） | 关注用户 |
 | DELETE | /api/v1/users/:id/follow | 登录 | 取消关注 |
 | GET | /api/v1/notes | 公开 | 品鉴笔记列表/筛选 |
@@ -132,7 +140,9 @@ wje-101/
 | GET | /api/v1/recipes | 公开 | 冲煮配方列表/筛选 |
 | GET | /api/v1/recipes/:id | 公开 | 冲煮配方详情 |
 | POST | /api/v1/recipes | 登录（限流） | 分享冲煮配方 |
-| GET | /api/v1/beans | 公开 | 咖啡豆库列表/筛选 |
+| GET | /api/v1/beans | 公开 | 咖啡豆库列表/筛选（返回全平台 `note_total`，登录时附本人 `tracked/track_status/user_note_count`） |
+| POST | /api/v1/beans/:id/want | 登录（限流） | 把豆加入我的待喝名单（每豆一条，重复返回 409） |
+| DELETE | /api/v1/beans/:id/want | 登录 | 把处于待喝（笔记数为 0）的豆移出名单；喝过的豆返回 409 |
 | POST | /api/v1/beans | admin（限流） | 新增咖啡豆 |
 | PUT | /api/v1/beans/:id | admin | 更新咖啡豆 |
 | DELETE | /api/v1/beans/:id | admin | 删除咖啡豆 |
@@ -154,9 +164,14 @@ wje-101/
 - 后端：`internal/constants/user.go`（定义）、`internal/model/user.go`、`internal/middleware/rbac.go`、`internal/router/beans.go`（管理员路由）、`internal/util/formatters.go`（RoleText）、`database/init.sql`
 - 前端：`src/constants/user.ts`（定义）、`src/router/index.ts`（守卫）、`src/pages/BeanLibrary.vue`（管理员按钮显隐）、`src/pages/Profile.vue`（角色标签）
 
+### BeanTrackStatus（want/tasted）
+
+- 后端：`internal/constants/user_bean.go`（定义）、`internal/util/formatters.go`（BeanTrackText）、`internal/service/user_bean_service.go`（状态由笔记数派生）、`internal/dto/user_bean_dto.go`（列表/分组输出）、`internal/constants/log_templates.go`
+- 前端：`src/constants/bean.ts`（BeanTrackStatus/Map 定义）、`src/pages/BeanLibrary.vue`（卡片待喝/喝过标签）、`src/pages/Profile.vue`（待喝/喝过两组）
+
 ## 横切关注点
 
-- 认证授权（JWT + RBAC）：`middleware/auth.go`、`rbac.go`、`util/jwt.go`、管理员豆种路由、前端路由守卫 + `hooks/useAuth.ts` + `utils/request.ts` 拦截器
+- 认证授权（JWT + RBAC）：`middleware/auth.go`、`optional_auth.go`、`rbac.go`、`util/jwt.go`、管理员豆种路由与待喝名单路由、前端路由守卫 + `hooks/useAuth.ts` + `utils/request.ts` 拦截器
 - 全局错误处理：`middleware/error_handler.go`、`util/app_error.go`、`constants/error_codes.go`、前端 `utils/request.ts` + `components/common/ErrorToast.vue`
 - 请求日志：`middleware/logger.go`（request_id/method/path/status/latency_ms）
 - 文件上传：`handler/upload_handler.go`、`util/file.go`、`components/common/ImageUploader.vue`、Nginx `/uploads/` 代理

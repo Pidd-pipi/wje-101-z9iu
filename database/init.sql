@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS tasting_notes (
   id BIGSERIAL PRIMARY KEY,
   user_id BIGINT NOT NULL,
   coffee_name VARCHAR(128) NOT NULL,
+  bean_id BIGINT DEFAULT 0,
   origin VARCHAR(128),
   roast_level VARCHAR(16) NOT NULL,
   flavor_tags JSONB DEFAULT '[]',
@@ -33,6 +34,8 @@ CREATE TABLE IF NOT EXISTS tasting_notes (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   CONSTRAINT fk_note_user FOREIGN KEY (user_id) REFERENCES users(id)
 );
+
+CREATE INDEX IF NOT EXISTS idx_tasting_notes_bean ON tasting_notes(bean_id);
 
 CREATE TABLE IF NOT EXISTS brew_recipes (
   id BIGSERIAL PRIMARY KEY,
@@ -83,6 +86,16 @@ CREATE TABLE IF NOT EXISTS user_follows (
   PRIMARY KEY (follower_id, following_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_beans (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  bean_id BIGINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT idx_user_bean UNIQUE (user_id, bean_id),
+  CONSTRAINT fk_user_bean_user FOREIGN KEY (user_id) REFERENCES users(id),
+  CONSTRAINT fk_user_bean_bean FOREIGN KEY (bean_id) REFERENCES coffee_beans(id)
+);
+
 -- 种子数据
 INSERT INTO users (username, email, password_hash, bio, role) VALUES
   ('admin', 'admin@coffeetaste.local', '$2a$10$VGETME6mK/u27yF1UwKHkuh0b36LjEpJjw2c4J2L7wPph1pcG0cVO', '咖啡平台管理员', 'admin'),
@@ -99,10 +112,17 @@ INSERT INTO brew_recipes (user_id, name, device, water_temp, grind_size, ratio, 
   (2, '手冲三段式', '手冲壶', 92, '中细', '1:15', '[{"step_number":1,"description":"闷蒸30秒","duration_seconds":30},{"step_number":2,"description":"第一段注水至150ml","duration_seconds":20},{"step_number":3,"description":"第二段注水至300ml","duration_seconds":30}]'),
   (3, '法压壶经典', '法压壶', 94, '中粗', '1:14', '[{"step_number":1,"description":"注水并搅拌","duration_seconds":10},{"step_number":2,"description":"浸泡4分钟","duration_seconds":240},{"step_number":3,"description":"缓慢压杆","duration_seconds":15}]');
 
-INSERT INTO tasting_notes (user_id, coffee_name, origin, roast_level, flavor_tags, aroma_score, acidity_score, body_score, overall_score, brew_method, brew_recipe_id, notes_text, image_url) VALUES
-  (2, '埃塞俄比亚耶加雪菲', '埃塞俄比亚', 'light', '["柑橘","茉莉"]', 8.5, 8.0, 7.0, 8.3, '手冲', 1, '花香明显，柑橘酸质明亮，回甘持久。', 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600'),
-  (3, '哥伦比亚慧兰', '哥伦比亚', 'medium', '["坚果","焦糖"]', 7.5, 6.8, 7.8, 7.6, '法压', 2, '甜感平衡，坚果香气浓郁。', 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600'),
-  (2, '哥斯达黎加蜜处理', '哥斯达黎加', 'medium', '["莓果","红糖"]', 8.0, 7.2, 8.0, 7.9, '手冲', 0, '莓果酸甜与红糖甜感交织。', 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=600');
+INSERT INTO tasting_notes (user_id, coffee_name, bean_id, origin, roast_level, flavor_tags, aroma_score, acidity_score, body_score, overall_score, brew_method, brew_recipe_id, notes_text, image_url) VALUES
+  (2, '埃塞俄比亚耶加雪菲', 1, '埃塞俄比亚', 'light', '["柑橘","茉莉"]', 8.5, 8.0, 7.0, 8.3, '手冲', 1, '花香明显，柑橘酸质明亮，回甘持久。', 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=600'),
+  (3, '哥伦比亚慧兰', 2, '哥伦比亚', 'medium', '["坚果","焦糖"]', 7.5, 6.8, 7.8, 7.6, '法压', 2, '甜感平衡，坚果香气浓郁。', 'https://images.unsplash.com/photo-1447933601403-0c6688de566e?w=600'),
+  (2, '哥斯达黎加蜜处理', 3, '哥斯达黎加', 'medium', '["莓果","红糖"]', 8.0, 7.2, 8.0, 7.9, '手冲', 0, '莓果酸甜与红糖甜感交织。', 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=600');
+
+-- 待喝/喝过名单：barista 喝过 1、3，待喝 4；roaster 喝过 2
+INSERT INTO user_beans (user_id, bean_id) VALUES
+  (2, 1),
+  (2, 3),
+  (2, 4),
+  (3, 2);
 
 INSERT INTO comments (note_id, user_id, content) VALUES
   (1, 3, '我也很喜欢这只耶加雪菲，柑橘调太棒了！'),

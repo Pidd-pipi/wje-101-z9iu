@@ -1,9 +1,9 @@
 <template>
   <div class="page">
-    <h1>创建品鉴笔记</h1>
+    <h1>{{ isEdit ? '编辑品鉴笔记' : '创建品鉴笔记' }}</h1>
     <el-form label-width="90px" class="form">
       <el-form-item label="豆种">
-        <el-select v-model="beanId" placeholder="选择豆种自动填充" filterable clearable style="width: 320px" @change="onBeanChange">
+        <el-select v-model="form.bean_id" placeholder="选择豆种自动填充（选定后计入喝过）" filterable clearable style="width: 320px" @change="onBeanChange">
           <el-option v-for="b in beans" :key="b.id" :label="`${b.name}（${b.origin}）`" :value="b.id" />
         </el-select>
       </el-form-item>
@@ -29,7 +29,8 @@
       <el-form-item label="品鉴笔记"><el-input v-model="form.notes_text" type="textarea" :rows="4" /></el-form-item>
       <el-form-item label="配图"><ImageUploader v-model="form.image_url" /></el-form-item>
       <el-form-item>
-        <el-button type="primary" :loading="submitting" @click="submit">发布笔记</el-button>
+        <el-button type="primary" :loading="submitting" @click="submit">{{ isEdit ? '保存修改' : '发布笔记' }}</el-button>
+        <el-button v-if="isEdit" @click="router.back()">取消</el-button>
       </el-form-item>
     </el-form>
   </div>
@@ -38,24 +39,25 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import FlavorTags from '@/components/common/FlavorTags.vue'
 import ImageUploader from '@/components/common/ImageUploader.vue'
-import { createNote } from '@/api/note'
+import { createNote, updateNote, getNote } from '@/api/note'
 import { listBeans } from '@/api/bean'
 import { listRecipes } from '@/api/recipe'
-import { RoastLevelMap, parseTags, type RoastLevel } from '@/constants/note'
+import { RoastLevelMap, parseTags, type RoastLevel, type TastingNote } from '@/constants/note'
 import type { CoffeeBean } from '@/constants/bean'
 import type { BrewRecipe } from '@/types/api'
 
+const route = useRoute()
 const router = useRouter()
+const isEdit = !!route.params.id
 const beans = ref<CoffeeBean[]>([])
 const recipes = ref<BrewRecipe[]>([])
-const beanId = ref<number>()
 const tagInput = ref<string[]>([])
 const submitting = ref(false)
 const form = reactive({
-  coffee_name: '', origin: '', roast_level: 'light' as string, flavor_tags: '[]',
+  coffee_name: '', bean_id: 0 as number, origin: '', roast_level: 'light' as string, flavor_tags: '[]',
   aroma_score: 0, acidity_score: 0, body_score: 0, overall_score: 0,
   brew_method: '', brew_recipe_id: 0, notes_text: '', image_url: '',
 })
@@ -67,7 +69,28 @@ watch(tagInput, (v) => {
 onMounted(async () => {
   beans.value = (await listBeans({ page_size: 100 })).list
   recipes.value = (await listRecipes({ page_size: 100 })).list
+  if (isEdit) {
+    const res = await getNote(route.params.id as string)
+    fillFromNote(res.note)
+  }
 })
+
+function fillFromNote(n: TastingNote) {
+  form.coffee_name = n.coffee_name
+  form.bean_id = n.bean_id || 0
+  form.origin = n.origin
+  form.roast_level = n.roast_level
+  form.flavor_tags = n.flavor_tags || '[]'
+  tagInput.value = parseTags(n.flavor_tags)
+  form.aroma_score = n.aroma_score
+  form.acidity_score = n.acidity_score
+  form.body_score = n.body_score
+  form.overall_score = n.overall_score
+  form.brew_method = n.brew_method
+  form.brew_recipe_id = n.brew_recipe_id || 0
+  form.notes_text = n.notes_text
+  form.image_url = n.image_url
+}
 
 function onBeanChange(id: number | undefined) {
   const b = beans.value.find((x) => x.id === id)
@@ -85,9 +108,16 @@ async function submit() {
   }
   submitting.value = true
   try {
-    const note = await createNote({ ...form, roast_level: form.roast_level as RoastLevel, brew_recipe_id: form.brew_recipe_id || 0 })
-    ElMessage.success('品鉴笔记已发布')
-    router.push(`/note/${note.id}`)
+    const payload = { ...form, roast_level: form.roast_level as RoastLevel, bean_id: form.bean_id || 0, brew_recipe_id: form.brew_recipe_id || 0 }
+    if (isEdit) {
+      await updateNote(route.params.id as string, payload)
+      ElMessage.success('品鉴笔记已更新')
+      router.replace(`/note/${route.params.id}`)
+    } else {
+      const note = await createNote(payload)
+      ElMessage.success('品鉴笔记已发布')
+      router.push(`/note/${note.id}`)
+    }
   } finally {
     submitting.value = false
   }

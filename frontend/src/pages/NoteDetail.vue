@@ -20,6 +20,7 @@
             <el-button :type="liked ? 'warning' : 'default'" :loading="liking" @click="toggleLike">
               👍 {{ likeCount }}
             </el-button>
+            <el-button v-if="isOwner" type="primary" plain @click="$router.push(`/note/${note.id}/edit`)">编辑</el-button>
             <el-button v-if="isOwner" type="danger" plain @click="remove">删除</el-button>
           </div>
         </el-card>
