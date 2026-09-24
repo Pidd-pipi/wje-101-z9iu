@@ -6,6 +6,7 @@ import (
 	"log/slog"
 
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/constants"
+	"github.com/wjecoffeetaste/wjecoffeetaste/internal/dto"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/model"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/repository"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/util"
@@ -13,13 +14,15 @@ import (
 
 // BeanService handles coffee bean library.
 type BeanService struct {
-	repo   *repository.CoffeeBeanRepository
-	logger *slog.Logger
+	repo     *repository.CoffeeBeanRepository
+	noteRepo *repository.TastingNoteRepository
+	listRepo *repository.UserBeanListRepository
+	logger   *slog.Logger
 }
 
 // NewBeanService creates a BeanService.
-func NewBeanService(repo *repository.CoffeeBeanRepository, logger *slog.Logger) *BeanService {
-	return &BeanService{repo: repo, logger: logger}
+func NewBeanService(repo *repository.CoffeeBeanRepository, noteRepo *repository.TastingNoteRepository, listRepo *repository.UserBeanListRepository, logger *slog.Logger) *BeanService {
+	return &BeanService{repo: repo, noteRepo: noteRepo, listRepo: listRepo, logger: logger}
 }
 
 // Create adds a bean (admin).
@@ -74,8 +77,16 @@ func (s *BeanService) Update(id uint, b *model.CoffeeBean) (*model.CoffeeBean, e
 	return exist, nil
 }
 
-// Delete removes a bean (admin).
+// Delete removes a bean (admin) and clears user list entries pointing at it.
+// List rows are removed first because the SQL schema declares a foreign key
+// from user_bean_lists to coffee_beans.
 func (s *BeanService) Delete(id uint) error {
+	if _, err := s.repo.FindByID(id); err != nil {
+		return fmt.Errorf("bean delete find: %w", err)
+	}
+	if err := s.listRepo.DeleteByBean(id); err != nil {
+		return fmt.Errorf("bean delete list cleanup: %w", err)
+	}
 	if err := s.repo.Delete(id); err != nil {
 		return fmt.Errorf("bean delete: %w", err)
 	}
@@ -83,12 +94,53 @@ func (s *BeanService) Delete(id uint) error {
 	return nil
 }
 
-// List filters beans.
-func (s *BeanService) List(origin, process, keyword string, page, pageSize int) ([]model.CoffeeBean, int64, error) {
+// List filters beans. viewerID == 0 means anonymous browsing: only the public
+// tasting-note tally is attached; otherwise personal list state is attached.
+func (s *BeanService) List(origin, process, keyword string, page, pageSize int, viewerID uint) ([]dto.BeanListItem, int64, error) {
 	items, total, err := s.repo.List(origin, process, keyword, page, pageSize)
 	if err != nil {
 		return nil, 0, fmt.Errorf("bean list: %w", err)
 	}
+	result := make([]dto.BeanListItem, 0, len(items))
+	if len(items) == 0 {
+		s.logger.Info(fmt.Sprintf(constants.LogBeanListSuccess, process), "total", total)
+		return result, total, nil
+	}
+
+	names := make([]string, 0, len(items))
+	for _, b := range items {
+		names = append(names, b.Name)
+	}
+	globalCounts, err := s.noteRepo.CountGroupByBeanNames(names)
+	if err != nil {
+		return nil, 0, fmt.Errorf("bean list counts: %w", err)
+	}
+	tracked := make(map[uint]bool)
+	myCounts := make(map[string]int64)
+	if viewerID != 0 {
+		trackedIDs, err := s.listRepo.ListBeanIDsByUser(viewerID)
+		if err != nil {
+			return nil, 0, fmt.Errorf("bean list user list: %w", err)
+		}
+		for _, id := range trackedIDs {
+			tracked[id] = true
+		}
+		myRows, err := s.noteRepo.CountGroupByBeanNameForUser(viewerID, names)
+		if err != nil {
+			return nil, 0, fmt.Errorf("bean list user counts: %w", err)
+		}
+		for _, row := range myRows {
+			myCounts[row.CoffeeName] = row.Count
+		}
+	}
+	for _, b := range items {
+		result = append(result, dto.BeanListItem{
+			CoffeeBean:  b,
+			NoteCount:   globalCounts[b.Name],
+			MyNoteCount: myCounts[b.Name],
+			InList:      tracked[b.ID],
+		})
+	}
 	s.logger.Info(fmt.Sprintf(constants.LogBeanListSuccess, process), "total", total)
-	return items, total, nil
+	return result, total, nil
 }

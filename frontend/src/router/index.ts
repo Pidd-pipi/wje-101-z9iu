@@ -5,6 +5,7 @@ import { useUserStore } from '@/stores/useUserStore'
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: () => import('@/pages/Home.vue'), meta: { title: '首页' } },
   { path: '/note/create', name: 'noteCreate', component: () => import('@/pages/NoteCreate.vue'), meta: { title: '创建品鉴笔记', requiresAuth: true } },
+  { path: '/note/:id/edit', name: 'noteEdit', component: () => import('@/pages/NoteCreate.vue'), meta: { title: '编辑品鉴笔记', requiresAuth: true } },
   { path: '/note/:id', name: 'noteDetail', component: () => import('@/pages/NoteDetail.vue'), meta: { title: '品鉴详情' } },
   { path: '/beans', name: 'beans', component: () => import('@/pages/BeanLibrary.vue'), meta: { title: '豆种库' } },
   { path: '/profile/:id', name: 'profile', component: () => import('@/pages/Profile.vue'), meta: { title: '个人主页' } },

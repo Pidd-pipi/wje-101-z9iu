@@ -83,6 +83,16 @@ CREATE TABLE IF NOT EXISTS user_follows (
   PRIMARY KEY (follower_id, following_id)
 );
 
+CREATE TABLE IF NOT EXISTS user_bean_lists (
+  id BIGSERIAL PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  bean_id BIGINT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  CONSTRAINT uni_user_bean_list UNIQUE (user_id, bean_id),
+  CONSTRAINT fk_ubl_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  CONSTRAINT fk_ubl_bean FOREIGN KEY (bean_id) REFERENCES coffee_beans(id) ON DELETE CASCADE
+);
+
 -- 种子数据
 INSERT INTO users (username, email, password_hash, bio, role) VALUES
   ('admin', 'admin@coffeetaste.local', '$2a$10$VGETME6mK/u27yF1UwKHkuh0b36LjEpJjw2c4J2L7wPph1pcG0cVO', '咖啡平台管理员', 'admin'),
@@ -115,4 +125,11 @@ INSERT INTO likes (user_id, note_id) VALUES
 
 INSERT INTO user_follows (follower_id, following_id) VALUES
   (2, 3),
+  (3, 2);
+
+-- 待喝名单：barista 喝过的耶加雪菲(1)、蜜处理(3)保持跟踪，曼特宁(4)为纯待喝；roaster 跟踪慧兰(2)
+INSERT INTO user_bean_lists (user_id, bean_id) VALUES
+  (2, 1),
+  (2, 3),
+  (2, 4),
   (3, 2);

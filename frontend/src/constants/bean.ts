@@ -18,3 +18,17 @@ export interface CoffeeBean {
   description: string
   created_at: string
 }
+
+// Bean card enriched by the backend with tasting-note tallies and, when
+// logged in, the viewer's personal want-to-drink state.
+export interface BeanListItem extends CoffeeBean {
+  note_count: number
+  my_note_count: number
+  in_list: boolean
+}
+
+// Personal profile groups: want = waiting list, drunk = beans with my notes.
+export interface UserBeanGroups {
+  want: BeanListItem[]
+  drunk: BeanListItem[]
+}

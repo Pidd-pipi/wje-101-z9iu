@@ -17,9 +17,9 @@ import (
 
 // NoteHandler exposes tasting note endpoints.
 type NoteHandler struct {
-	svc    *service.NoteService
+	svc     *service.NoteService
 	likeSvc *service.LikeService
-	logger *slog.Logger
+	logger  *slog.Logger
 }
 
 // NewNoteHandler creates a NoteHandler.
@@ -106,7 +106,8 @@ func (h *NoteHandler) Update(c *gin.Context) {
 	n := &model.TastingNote{
 		CoffeeName: req.CoffeeName, Origin: req.Origin, RoastLevel: req.RoastLevel,
 		FlavorTags: req.FlavorTags, AromaScore: req.AromaScore, AcidityScore: req.AcidityScore,
-		BodyScore: req.BodyScore, OverallScore: req.OverallScore, NotesText: req.NotesText,
+		BodyScore: req.BodyScore, OverallScore: req.OverallScore, BrewMethod: req.BrewMethod,
+		BrewRecipeID: req.BrewRecipeID, NotesText: req.NotesText, ImageURL: req.ImageURL,
 	}
 	updated, err := h.svc.Update(middleware.GetUserID(c), uint(id), n)
 	if err != nil {

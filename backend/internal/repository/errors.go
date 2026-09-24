@@ -14,8 +14,13 @@ var (
 )
 
 func isDuplicate(err error) bool {
-	return err != nil && (strings.Contains(err.Error(), "duplicate key") ||
-		strings.Contains(err.Error(), "Duplicate entry"))
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "duplicate key") || // PostgreSQL
+		strings.Contains(msg, "duplicate entry") || // MySQL
+		strings.Contains(msg, "unique constraint failed") // SQLite
 }
 
 func translate(err error) error {

@@ -18,6 +18,7 @@ func migrate(db *gorm.DB) error {
 		&model.Comment{},
 		&model.Like{},
 		&model.UserFollow{},
+		&model.UserBeanList{},
 	)
 }
 
@@ -95,6 +96,18 @@ func seed(db *gorm.DB) error {
 		{FollowerID: user2.ID, FollowingID: user.ID},
 	}
 	if err := db.Create(&follows).Error; err != nil {
+		return err
+	}
+
+	// Beans that notes reference stay tracked so a later note deletion moves
+	// them back to want-to-drink; the last bean is a pure "want to try".
+	beanList := []model.UserBeanList{
+		{UserID: user.ID, BeanID: beans[0].ID},
+		{UserID: user.ID, BeanID: beans[2].ID},
+		{UserID: user.ID, BeanID: beans[3].ID},
+		{UserID: user2.ID, BeanID: beans[1].ID},
+	}
+	if err := db.Create(&beanList).Error; err != nil {
 		return err
 	}
 

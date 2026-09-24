@@ -22,7 +22,38 @@
           <div class="meta">{{ b.origin || '-' }}</div>
           <FlavorTags :tags="b.flavor_tags" />
           <p class="desc">{{ b.description }}</p>
-          <el-button v-if="isAdmin" size="small" type="danger" plain @click="removeBean(b.id)">删除</el-button>
+          <div class="count-line">
+            共 <b>{{ b.note_count }}</b> 篇品鉴笔记
+            <el-tag v-if="isLoggedIn && b.my_note_count > 0" type="success" size="small">我喝过 {{ b.my_note_count }} 篇</el-tag>
+            <el-tag v-else-if="isLoggedIn && b.in_list" type="info" size="small">待喝中</el-tag>
+          </div>
+          <div class="actions">
+            <template v-if="isLoggedIn">
+              <el-button v-if="b.my_note_count > 0" size="small" type="success" plain disabled>
+                已喝 {{ b.my_note_count }} 篇
+              </el-button>
+              <el-button
+                v-else-if="b.in_list"
+                size="small"
+                type="info"
+                plain
+                :loading="pendingId === b.id"
+                @click="moveOutOfList(b)"
+              >
+                移出待喝
+              </el-button>
+              <el-button
+                v-else
+                size="small"
+                type="primary"
+                :loading="pendingId === b.id"
+                @click="addToList(b)"
+              >
+                加入待喝
+              </el-button>
+            </template>
+            <el-button v-if="isAdmin" size="small" type="danger" plain @click="removeBean(b.id)">删除</el-button>
+          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -56,16 +87,17 @@ import FlavorTags from '@/components/common/FlavorTags.vue'
 import EmptyState from '@/components/common/EmptyState.vue'
 import { useBeanStore } from '@/stores/useBeanStore'
 import { useAuth } from '@/hooks/useAuth'
-import { createBean, deleteBean } from '@/api/bean'
-import { ProcessMethodMap, type ProcessMethod } from '@/constants/bean'
+import { addBeanToList, createBean, deleteBean, removeBeanFromList } from '@/api/bean'
+import { ProcessMethodMap, type BeanListItem, type ProcessMethod } from '@/constants/bean'
 
 const store = useBeanStore()
-const { isAdmin } = useAuth()
+const { isLoggedIn, isAdmin } = useAuth()
 const beans = computed(() => store.beans)
 const origin = ref('')
 const process = ref('')
 const keyword = ref('')
 const showAdd = ref(false)
+const pendingId = ref(0)
 const addForm = reactive({ name: '', origin: '', process_method: 'washed', flavor_tags: '[]', description: '' })
 
 const ORIGINS = ['埃塞俄比亚', '哥伦比亚', '哥斯达黎加', '印度尼西亚']
@@ -84,6 +116,35 @@ function onReset() {
   process.value = ''
   keyword.value = ''
   load()
+}
+
+// Optimistic toggle: flip the card state first; on failure the request layer
+// shows the error and we reload to restore the original server state.
+async function addToList(b: BeanListItem) {
+  pendingId.value = b.id
+  const previous = b.in_list
+  b.in_list = true
+  try {
+    await addBeanToList(b.id)
+    ElMessage.success('已加入待喝名单')
+  } catch {
+    b.in_list = previous
+  } finally {
+    pendingId.value = 0
+  }
+}
+async function moveOutOfList(b: BeanListItem) {
+  pendingId.value = b.id
+  const previous = b.in_list
+  b.in_list = false
+  try {
+    await removeBeanFromList(b.id)
+    ElMessage.success('已移出待喝名单')
+  } catch {
+    b.in_list = previous
+  } finally {
+    pendingId.value = 0
+  }
 }
 async function addBean() {
   if (!addForm.name) {
@@ -107,4 +168,7 @@ async function removeBean(id: number) {
 .bean-card { margin-bottom: 16px; }
 .meta { color: #999; font-size: 12px; margin: 6px 0; }
 .desc { color: #666; margin-top: 8px; }
+.count-line { display: flex; align-items: center; gap: 8px; color: #999; font-size: 12px; margin-top: 10px; }
+.count-line b { color: #7b4b2a; }
+.actions { margin-top: 10px; display: flex; gap: 8px; }
 </style>

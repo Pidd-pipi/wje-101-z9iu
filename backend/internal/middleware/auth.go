@@ -18,19 +18,37 @@ const UserKey = "user"
 // AuthRequired validates the JWT and injects claims into the context.
 func AuthRequired(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		header := c.GetHeader("Authorization")
-		if !strings.HasPrefix(header, "Bearer ") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.Fail(constants.CodeUnauthorized, constants.MsgUnauthorized))
-			return
-		}
-		claims, err := util.ParseToken(strings.TrimPrefix(header, "Bearer "), cfg.JWTSecret)
-		if err != nil {
+		claims, ok := parseBearer(c, cfg)
+		if !ok {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, dto.Fail(constants.CodeUnauthorized, constants.MsgUnauthorized))
 			return
 		}
 		c.Set(UserKey, claims)
 		c.Next()
 	}
+}
+
+// AuthOptional injects claims when a valid token is present, but lets
+// anonymous requests through for public browsing endpoints.
+func AuthOptional(cfg *config.Config) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if claims, ok := parseBearer(c, cfg); ok {
+			c.Set(UserKey, claims)
+		}
+		c.Next()
+	}
+}
+
+func parseBearer(c *gin.Context, cfg *config.Config) (*util.Claims, bool) {
+	header := c.GetHeader("Authorization")
+	if !strings.HasPrefix(header, "Bearer ") {
+		return nil, false
+	}
+	claims, err := util.ParseToken(strings.TrimPrefix(header, "Bearer "), cfg.JWTSecret)
+	if err != nil {
+		return nil, false
+	}
+	return claims, true
 }
 
 // GetUserID extracts the authenticated user id from the context.

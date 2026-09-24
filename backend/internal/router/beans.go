@@ -10,7 +10,11 @@ import (
 
 func registerBeanRoutes(v1 *gin.RouterGroup, cfg *config.Config, h *handler.BeanHandler, limiter *middleware.RateLimiter) {
 	beans := v1.Group("/beans")
-	beans.GET("", h.List)
+	// Browsing stays public; an optional identity attaches personal list state.
+	beans.GET("", middleware.AuthOptional(cfg), h.List)
+	auth := beans.Group("", middleware.AuthRequired(cfg))
+	auth.POST("/:id/list", limiter.Limit(), h.AddToList)
+	auth.DELETE("/:id/list", h.RemoveFromList)
 	admin := beans.Group("", middleware.AuthRequired(cfg), middleware.RequireRole("admin"))
 	admin.POST("", limiter.Limit(), h.Create)
 	admin.PUT("/:id", h.Update)

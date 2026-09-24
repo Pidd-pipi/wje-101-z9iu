@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { listBeans } from '@/api/bean'
-import type { CoffeeBean } from '@/constants/bean'
+import type { BeanListItem } from '@/constants/bean'
 
 export const useBeanStore = defineStore('bean', () => {
-  const beans = ref<CoffeeBean[]>([])
+  const beans = ref<BeanListItem[]>([])
   const total = ref(0)
 
   async function load(params: { page?: number; page_size?: number; origin?: string; process?: string; keyword?: string } = {}) {

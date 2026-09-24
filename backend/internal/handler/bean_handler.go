@@ -9,6 +9,7 @@ import (
 
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/constants"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/dto"
+	"github.com/wjecoffeetaste/wjecoffeetaste/internal/middleware"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/model"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/service"
 	"github.com/wjecoffeetaste/wjecoffeetaste/internal/util"
@@ -16,16 +17,18 @@ import (
 
 // BeanHandler exposes coffee bean endpoints.
 type BeanHandler struct {
-	svc    *service.BeanService
-	logger *slog.Logger
+	svc     *service.BeanService
+	listSvc *service.UserBeanListService
+	logger  *slog.Logger
 }
 
 // NewBeanHandler creates a BeanHandler.
-func NewBeanHandler(svc *service.BeanService, logger *slog.Logger) *BeanHandler {
-	return &BeanHandler{svc: svc, logger: logger}
+func NewBeanHandler(svc *service.BeanService, listSvc *service.UserBeanListService, logger *slog.Logger) *BeanHandler {
+	return &BeanHandler{svc: svc, listSvc: listSvc, logger: logger}
 }
 
-// List handles GET /beans.
+// List handles GET /beans. Anonymous users see public note counts;
+// authenticated users additionally see their own list state.
 func (h *BeanHandler) List(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "12"))
@@ -38,7 +41,7 @@ func (h *BeanHandler) List(c *gin.Context) {
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 12
 	}
-	items, total, err := h.svc.List(origin, process, keyword, page, pageSize)
+	items, total, err := h.svc.List(origin, process, keyword, page, pageSize, middleware.GetUserID(c))
 	if err != nil {
 		c.Error(err)
 		return
@@ -95,4 +98,47 @@ func (h *BeanHandler) Delete(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, dto.OK(gin.H{"deleted": true}))
+}
+
+// AddToList handles POST /beans/:id/list: put the bean on my want-to-drink list.
+func (h *BeanHandler) AddToList(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid bean id"))
+		return
+	}
+	if err := h.listSvc.Add(middleware.GetUserID(c), uint(id)); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusCreated, dto.OK(gin.H{"in_list": true}))
+}
+
+// RemoveFromList handles DELETE /beans/:id/list: move a want-to-drink bean out.
+func (h *BeanHandler) RemoveFromList(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid bean id"))
+		return
+	}
+	if err := h.listSvc.Remove(middleware.GetUserID(c), uint(id)); err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(gin.H{"in_list": false}))
+}
+
+// UserBeans handles GET /users/:id/beans: the user's want/drunk bean groups.
+func (h *BeanHandler) UserBeans(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil {
+		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid user id"))
+		return
+	}
+	groups, err := h.listSvc.GetUserBeanGroups(uint(id))
+	if err != nil {
+		c.Error(err)
+		return
+	}
+	c.JSON(http.StatusOK, dto.OK(groups))
 }
